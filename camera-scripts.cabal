@@ -15,4 +15,9 @@ cabal-version:       >=1.8
 executable rename-s3-photos
   main-is:             renameSamsungS3Photos.hs
   -- other-modules:       
-  build-depends:       base, directory, filepath, parsec, pipes, transformers
+  build-depends:       base, bytestring, containers, directory, filepath, parsec, pipes, text, transformers
+
+executable rename-using-exiftags
+  main-is:             renameUsingExifTags.hs
+  -- other-modules:       
+  build-depends:       base, bytestring, containers, directory, filepath, parsec, pipes, process, text, transformers

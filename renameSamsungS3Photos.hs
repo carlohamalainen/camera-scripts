@@ -7,32 +7,7 @@ import System.Directory
 import System.FilePath.Posix
 import Text.Parsec
 
-data PhotoDateTime = PhotoDateTime { photoYear      :: String
-                                   , photoMonth     :: String
-                                   , photoDay       :: String
-                                   , photoHour      :: String
-                                   , photoMinute    :: String
-                                   , photoSecond    :: String
-                                   , photoSubsecond :: Maybe String
-                                   }
-    deriving (Show)
-
--- http://stackoverflow.com/questions/14259229/streaming-recursive-descent-of-a-directory-in-haskell/14261710#14261710
-getRecursiveContents :: (Proxy p) => FilePath -> () -> Producer p FilePath IO ()
-getRecursiveContents topPath () = runIdentityP $ do
-  names <- lift $ getDirectoryContents topPath
-  let properNames  = filter (`notElem` [".", ".."]) names
-  forM_ properNames $ \name -> do
-    let path = topPath </> name
-    isDirectory <- lift $ doesDirectoryExist path
-    if isDirectory
-      then getRecursiveContents path ()
-      else respond path
-
--- Note on execWriterT/raiseK: http://ocharles.org.uk/blog/posts/2012-12-16-24-days-of-hackage-pipes.html
-getRecursiveContentsList :: FilePath -> IO [FilePath]
-getRecursiveContentsList path =
-    execWriterT $ runProxy $ raiseK (getRecursiveContents path) >-> toListD >>= return
+import Common
 
 subsecond :: ParsecT String u Data.Functor.Identity.Identity (String)
 subsecond = do
@@ -92,15 +67,9 @@ samsungPhotoFile = do
     case end of Just e  -> return $ PhotoDateTime year month day hour minute second (Just e)
                 Nothing -> return $ PhotoDateTime year month day hour minute second Nothing
 
-finalFilename (PhotoDateTime year month day hour minute second (Just e))
-    = (intercalate "-" [year, month, day]) ++ "++" ++ (intercalate "-" [hour, minute, second]) ++ "-" ++ e ++ ".jpg"
-finalFilename (PhotoDateTime year month day hour minute second Nothing)
-    = (intercalate "-" [year, month, day]) ++ "++" ++ (intercalate "-" [hour, minute, second]) ++ ".jpg"
-
 main = do
     files <- getRecursiveContentsList "."
 
     forM_ files (\f -> do let f' = finalFilename <$> parse samsungPhotoFile "" (snd $ splitFileName f)
-                          case f' of (Right f'')    -> do renameFile f (joinPath [fst $ splitFileName f, f''])
-                                                          putStrLn $ f ++ " -> " ++ f''
+                          case f' of (Right f'')    -> safeRename f (joinPath [fst $ splitFileName f, f''])
                                      (Left err)     -> putStrLn $ "ignoring: " ++ f)
