@@ -1,24 +1,12 @@
 import Control.Applicative hiding ((<|>),many)
--- import Control.Exception
-import Control.Monad (forM_)
 import Control.Monad.IO.Class
--- import Control.Monad.Identity
--- import Control.Monad.Reader
 import Control.Proxy
--- import Control.Proxy.Trans.Writer
 import Data.Maybe
--- import Data.Char (toLower)
 import Data.List (intercalate)
 import System.Directory
--- import System.Environment ( getArgs )
 import System.FilePath.Posix
-import System.IO
-import System.Process
 import Control.Monad
--- import Control.Monad.State
 import Data.Functor.Identity
-import System.Directory
-import System.FilePath.Posix
 import System.IO
 import System.Process
 import Text.Parsec
@@ -27,7 +15,7 @@ import Data.Either
 
 import Common
 
-createdTime :: ParsecT String u Data.Functor.Identity.Identity (PhotoDateTime)
+createdTime :: ParsecT String u Data.Functor.Identity.Identity PhotoDateTime
 createdTime = do
     string "Image Created: "
    
@@ -58,7 +46,7 @@ parseCreatedTimeFromExif f = do
         parseResults = rights $ map (parse createdTime "") linesWithTerminatingNewlines
 
     case length parseResults of 1 -> return $ Just $ head parseResults
-                                _ -> return $ Nothing
+                                _ -> return Nothing
 
 main = do
     files <- getRecursiveContentsList "."

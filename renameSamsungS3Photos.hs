@@ -9,11 +9,10 @@ import Text.Parsec
 
 import Common
 
-subsecond :: ParsecT String u Data.Functor.Identity.Identity (String)
+subsecond :: ParsecT String u Data.Functor.Identity.Identity String
 subsecond = do
     char '_'
-    s <- many (noneOf ".")
-    return s
+    many (noneOf ".")
 
 {-
 samsungPhotoFile parses a filename from my Samsung Galaxy S3, as seen on the 

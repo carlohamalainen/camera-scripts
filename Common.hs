@@ -44,7 +44,7 @@ getRecursiveContents topPath () = runIdentityP $ do
 -- Note on execWriterT/raiseK: http://ocharles.org.uk/blog/posts/2012-12-16-24-days-of-hackage-pipes.html
 getRecursiveContentsList :: FilePath -> IO [FilePath]
 getRecursiveContentsList path =
-    execWriterT $ runProxy $ raiseK (getRecursiveContents path) >-> toListD >>= return
+    execWriterT $ runProxy $ raiseK (getRecursiveContents path) >-> toListD
 
 -- Read everything else available on a handle, and return the empty
 -- string if we have hit EOF.
@@ -57,9 +57,9 @@ readRestOfHandle handle = do
                 return $ DT.unpack $ DTE.decodeUtf8With DTEE.lenientDecode x  
 
 finalFilename (PhotoDateTime year month day hour minute second (Just e))
-    = (intercalate "-" [year, month, day]) ++ "++" ++ (intercalate "-" [hour, minute, second]) ++ "-" ++ e ++ ".jpg"
+    = intercalate "-" [year, month, day] ++ "++" ++ intercalate "-" [hour, minute, second] ++ "-" ++ e ++ ".jpg"
 finalFilename (PhotoDateTime year month day hour minute second Nothing)
-    = (intercalate "-" [year, month, day]) ++ "++" ++ (intercalate "-" [hour, minute, second]) ++ ".jpg"
+    = intercalate "-" [year, month, day] ++ "++" ++ intercalate "-" [hour, minute, second] ++ ".jpg"
 
 safeRename :: FilePath -> FilePath -> IO ()
 safeRename old new = do exists <- doesFileExist new
