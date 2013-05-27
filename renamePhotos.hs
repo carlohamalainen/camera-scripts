@@ -1,30 +1,23 @@
 import Control.Applicative hiding ((<|>),many)
-import Control.Monad (forM_)
+import Control.Monad
+import Control.Monad.IO.Class
 import Control.Proxy
+import Data.Either
 import Data.Functor.Identity
 import Data.List (intercalate)
-import System.Directory
-import System.FilePath.Posix
-import Text.Parsec
-
-import Control.Applicative hiding ((<|>),many)
-import Control.Monad (forM_)
-import Control.Proxy
-import Data.Functor.Identity
-import Data.List (intercalate)
+import Data.Maybe
 import System.Directory
 import System.FilePath.Posix
 import System.IO
+import System.Process
 import Text.Parsec
+import Text.Parsec.String
+
+import qualified Data.ByteString as BS
 import qualified Data.Map as DM
-
-
 import qualified Data.Text as DT
 import qualified Data.Text.Encoding as DTE
 import qualified Data.Text.Encoding.Error as DTEE
-
-import qualified Data.ByteString as BS
--- import qualified System.IO.Strict as S
 
 data PhotoDateTime = PhotoDateTime { photoYear      :: String
                                    , photoMonth     :: String
@@ -133,9 +126,59 @@ samsungPhotoFile = do
     case end of Just e  -> return $ PhotoDateTime year month day hour minute second (Just e)
                 Nothing -> return $ PhotoDateTime year month day hour minute second Nothing
 
+createdTime :: ParsecT String u Data.Functor.Identity.Identity PhotoDateTime
+createdTime = do
+    string "Image Created: "
+   
+    year  <- many (noneOf ":")
+    char ':'
+    month <- many (noneOf ":")
+    char ':'
+    day   <- many (noneOf " ")
+    char ' '
+
+    hour   <- many (noneOf ":")
+    char ':'
+    minute <- many (noneOf ":")
+    char ':'
+    second <- many (noneOf "\n")
+    char '\n'
+
+    return $ PhotoDateTime year month day hour minute second Nothing
+
+parseCreatedTimeFromExif :: String -> IO (Maybe PhotoDateTime)
+parseCreatedTimeFromExif f = do
+    (Just hin, Just hout, Just herr, pid) <- liftIO $ createProcess (proc "exiftags" [f]){ std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
+
+    stdout <- liftIO $ readRestOfHandle hout
+    -- stderr <- liftIO $ readRestOfHandle herr  -- FIXME we're ignoring stderr...
+
+    let linesWithTerminatingNewlines = map (++ "\n") (lines stdout)
+        parseBlah = map (parse createdTime "") linesWithTerminatingNewlines
+        parseResults = rights parseBlah
+
+    case length parseResults of 1 -> return $ Just $ head parseResults
+                                _ -> return Nothing
+
+-- Work out new file name by parsing a samsung-like name (handles the subsecond issue)
+newFilenameFromSamsung :: FilePath -> Maybe FilePath
+newFilenameFromSamsung f = case new of (Right new') -> Just (joinPath [fst $ splitFileName f, new'])
+                                       _            -> Nothing
+    where new = finalFilename <$> parse samsungPhotoFile "" (snd $ splitFileName f)
+
+-- Workout the new filename using exif tags (does not handle the subsecond issue)
+newFilenameFromExif :: FilePath -> IO (Maybe FilePath)
+newFilenameFromExif f = do new <- parseCreatedTimeFromExif f
+
+                           case new of (Just new') -> return $ Just (joinPath [fst $ splitFileName f, finalFilename new']) 
+                                       _           -> return Nothing
+
 main = do
     files <- getRecursiveContentsList "."
+    forM_ files (\f -> do let new1 = newFilenameFromSamsung f
+                          new2 <- newFilenameFromExif f
 
-    forM_ files (\f -> do let f' = finalFilename <$> parse samsungPhotoFile "" (snd $ splitFileName f)
-                          case f' of (Right f'')    -> safeRename f (joinPath [fst $ splitFileName f, f''])
-                                     (Left err)     -> putStrLn $ "ignoring: " ++ f)
+                          let news = catMaybes [new1, new2]
+
+                          if null news then putStrLn $ "skipping " ++ f
+                                       else safeRename f (head news))
