@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 import Control.Applicative hiding ((<|>),many)
 import Control.Monad
 import Control.Monad.IO.Class
@@ -126,23 +128,23 @@ samsungPhotoFile = do
     case end of Just e  -> return $ PhotoDateTime year month day hour minute second (Just e)
                 Nothing -> return $ PhotoDateTime year month day hour minute second Nothing
 
+manyThenChar :: Stream s m Char => Char -> ParsecT s u m String
+manyThenChar c = do
+    x <- many (noneOf [c])
+    char c
+    return x
+
 createdTime :: ParsecT String u Data.Functor.Identity.Identity PhotoDateTime
 createdTime = do
     string "Image Created: "
    
-    year  <- many (noneOf ":")
-    char ':'
-    month <- many (noneOf ":")
-    char ':'
-    day   <- many (noneOf " ")
-    char ' '
+    year  <- manyThenChar ':'
+    month <- manyThenChar ':'
+    day   <- manyThenChar ' '
 
-    hour   <- many (noneOf ":")
-    char ':'
-    minute <- many (noneOf ":")
-    char ':'
-    second <- many (noneOf "\n")
-    char '\n'
+    hour   <- manyThenChar ':'
+    minute <- manyThenChar ':'
+    second <- manyThenChar '\n'
 
     return $ PhotoDateTime year month day hour minute second Nothing
 
