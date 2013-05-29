@@ -27,7 +27,7 @@ find /media/CANON_DC -iname '*thm' -exec rm -vb {} \;
 
 # sshfs mount of Galaxy S3
 find $HOME/sshdroid/storage/sdcard0/DCIM/Camera -iname '*jpg' -exec mv -vb {} $INCOMING \;
-find $HOME/sshdroid/storage/sdcard0/DCIM/Video  -iname '*mp4' -exec mv -vb {} $INCOMING \;
+find $HOME/sshdroid/storage/sdcard0/DCIM/Camera -iname '*mp4' -exec mv -vb {} $INCOMING \;
 find $HOME/sshdroid/storage/sdcard0/DCIM/.thumbnails -type f -exec rm -v {} \;
 
 
