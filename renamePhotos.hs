@@ -29,23 +29,6 @@ data PhotoDateTime = PhotoDateTime { photoYear      :: String
                                    }
     deriving (Show)
 
--- http://stackoverflow.com/questions/14259229/streaming-recursive-descent-of-a-directory-in-haskell/14261710#14261710
-getRecursiveContents :: (Proxy p) => FilePath -> () -> Producer p FilePath IO ()
-getRecursiveContents topPath () = runIdentityP $ do
-  names <- lift $ getDirectoryContents topPath
-  let properNames  = filter (`notElem` [".", ".."]) names
-  forM_ properNames $ \name -> do
-    let path = topPath </> name
-    isDirectory <- lift $ doesDirectoryExist path
-    if isDirectory
-      then getRecursiveContents path ()
-      else respond path
-
--- Note on execWriterT/raiseK: http://ocharles.org.uk/blog/posts/2012-12-16-24-days-of-hackage-pipes.html
-getRecursiveContentsList :: FilePath -> IO [FilePath]
-getRecursiveContentsList path =
-    execWriterT $ runProxy $ raiseK (getRecursiveContents path) >-> toListD
-
 -- Read everything else available on a handle, and return the empty
 -- string if we have hit EOF.
 readRestOfHandle :: Handle -> IO String
@@ -174,7 +157,8 @@ newFilenameFromExif f = do new <- parseCreatedTimeFromExif f
                                        _           -> return Nothing
 
 main = do
-    files <- getRecursiveContentsList "."
+    files <- filter (`notElem` [".", ".."]) <$> getDirectoryContents "."
+
     forM_ files (\f -> do let new1 = newFilenameFromSamsung f
                           new2 <- newFilenameFromExif f
 
