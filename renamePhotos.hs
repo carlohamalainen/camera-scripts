@@ -37,7 +37,7 @@ readRestOfHandle handle = do
     if ineof
         then return ""
         else do x <- BS.hGetContents handle
-                return $ DT.unpack $ DTE.decodeUtf8With DTEE.lenientDecode x  
+                return $ DT.unpack $ DTE.decodeUtf8With DTEE.lenientDecode x
 
 finalFilename (PhotoDateTime year month day hour minute second (Just e))
     = intercalate "-" [year, month, day] ++ "++" ++ intercalate "-" [hour, minute, second] ++ "-" ++ e ++ ".jpg"
@@ -48,7 +48,7 @@ safeRename :: FilePath -> FilePath -> IO ()
 safeRename old new = do exists <- doesFileExist new
 
                         if exists then putStrLn $ "error: can't rename " ++ old ++ " because target " ++ new ++ " exists"
-                                  else do renameFile old new 
+                                  else do renameFile old new
                                           putStrLn $ old ++ " -> " ++ new
 
 
@@ -58,7 +58,7 @@ subsecond = do
     many (noneOf ".")
 
 {-
-samsungPhotoFile parses a filename from my Samsung Galaxy S3, as seen on the 
+samsungPhotoFile parses a filename from my Samsung Galaxy S3, as seen on the
 internal storage via sshfs.
 
 A normal file looks like this:
@@ -112,7 +112,7 @@ samsungPhotoFile = do
 createdTime :: ParsecT String u Data.Functor.Identity.Identity PhotoDateTime
 createdTime = do
     string "Image Created: "
-   
+
     year  <- many (noneOf ":")
     char ':'
     month <- many (noneOf ":")
@@ -153,7 +153,7 @@ newFilenameFromSamsung f = case new of (Right new') -> Just (joinPath [fst $ spl
 newFilenameFromExif :: FilePath -> IO (Maybe FilePath)
 newFilenameFromExif f = do new <- parseCreatedTimeFromExif f
 
-                           case new of (Just new') -> return $ Just (joinPath [fst $ splitFileName f, finalFilename new']) 
+                           case new of (Just new') -> return $ Just (joinPath [fst $ splitFileName f, finalFilename new'])
                                        _           -> return Nothing
 
 main = do
