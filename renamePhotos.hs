@@ -47,12 +47,9 @@ finalFilename (PhotoDateTime year month day hour minute second Nothing)
     = intercalate "-" [year, month, day] ++ "++" ++ intercalate "-" [hour, minute, second] ++ ".jpg"
 
 safeRename :: FilePath -> FilePath -> IO ()
-safeRename old new = do exists <- doesFileExist new
-
-                        if exists then putStrLn $ "error: can't rename " ++ old ++ " because target " ++ new ++ " exists"
-                                  else do renameFile old new
-                                          putStrLn $ old ++ " -> " ++ new
-
+safeRename old new = when (old /= new) (do exists <- doesFileExist new
+                                           (when (not exists) (do renameFile old new
+                                                                  putStrLn $ old ++ " -> " ++ new)))
 
 subsecond :: ParsecT String u Data.Functor.Identity.Identity String
 subsecond = do
