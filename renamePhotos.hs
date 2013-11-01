@@ -53,7 +53,6 @@ safeRename old new = when (old /= new) (do exists <- doesFileExist new
 
 subsecond :: ParsecT String u Data.Functor.Identity.Identity String
 subsecond = do
-    char '_'
     many (noneOf ".")
 
 {-
@@ -62,16 +61,12 @@ internal storage via sshfs.
 
 A normal file looks like this:
 
-    20130519_140044.jpg
-
-If two files have the same datestamp down to the second, they are differentiated by
-a _{n} suffix (which is parsed by subsecond):
-
-    20130504_121734_1.jpg
-    20130504_121734_2.jpg
+    IMG_20130519_114522216.jpg
 -}
 
 samsungPhotoFile = do
+    string "IMG_"
+
     year1 <- digit
     year2 <- digit
     year3 <- digit
