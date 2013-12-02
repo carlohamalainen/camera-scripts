@@ -153,10 +153,7 @@ newFilenameFromExif f = do new <- parseCreatedTimeFromExif f
 main = do
     files <- filter (`notElem` [".", ".."]) <$> getDirectoryContents "."
 
-    forM_ files (\f -> do let new1 = newFilenameFromSamsung f
-                          new2 <- newFilenameFromExif f
+    forM_ files (\f -> do possibleNewNames <- catMaybes <$> sequence [return $newFilenameFromSamsung f, newFilenameFromExif f]
 
-                          let news = catMaybes [new1, new2]
-
-                          if null news then putStrLn $ "skipping " ++ f
-                                       else safeRename f (head news))
+                          if null possibleNewNames then putStrLn $ "skipping " ++ f
+                                                   else safeRename f (head possibleNewNames))
