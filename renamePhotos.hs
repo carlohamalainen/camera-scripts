@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, RankNTypes #-}
 
 import Control.Applicative hiding ((<|>),many)
 import Control.Monad
@@ -41,6 +41,7 @@ readRestOfHandle handle = do
         else do x <- BS.hGetContents handle
                 return $ DT.unpack $ DTE.decodeUtf8With DTEE.lenientDecode x
 
+finalFilename :: PhotoDateTime -> String
 finalFilename (PhotoDateTime year month day hour minute second (Just e))
     = intercalate "-" [year, month, day] ++ "++" ++ intercalate "-" [hour, minute, second] ++ "-" ++ e ++ ".jpg"
 finalFilename (PhotoDateTime year month day hour minute second Nothing)
@@ -64,6 +65,7 @@ A normal file looks like this:
     IMG_20130519_114522216.jpg
 -}
 
+samsungPhotoFile :: forall u. ParsecT String u Identity PhotoDateTime
 samsungPhotoFile = do
     string "IMG_"
 
@@ -125,12 +127,12 @@ createdTime = do
 
 parseCreatedTimeFromExif :: String -> IO (Maybe PhotoDateTime)
 parseCreatedTimeFromExif f = do
-    (Just hin, Just hout, Just herr, pid) <- liftIO $ createProcess (proc "exiftags" [f]){ std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
+    (_, Just hout, _, _) <- liftIO $ createProcess (proc "exiftags" [f]){ std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
 
-    stdout <- liftIO $ readRestOfHandle hout
+    stdOut <- liftIO $ readRestOfHandle hout
     -- stderr <- liftIO $ readRestOfHandle herr  -- FIXME we're ignoring stderr...
 
-    let linesWithTerminatingNewlines = map (++ "\n") (lines stdout)
+    let linesWithTerminatingNewlines = map (++ "\n") (lines stdOut)
         parseBlah = map (parse createdTime "") linesWithTerminatingNewlines
         parseResults = rights parseBlah
 
@@ -150,6 +152,7 @@ newFilenameFromExif f = do new <- parseCreatedTimeFromExif f
                            case new of (Just new') -> return $ Just (joinPath [fst $ splitFileName f, finalFilename new'])
                                        _           -> return Nothing
 
+main :: IO ()
 main = do
     files <- filter (`notElem` [".", ".."]) <$> getDirectoryContents "."
 
