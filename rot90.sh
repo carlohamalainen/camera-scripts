@@ -1,5 +1,7 @@
 #!/bin/bash
 
+type convert  >/dev/null 2>&1 || { echo >&2 "convert missing :(";  exit 1; }
+
 set -e
 set -x
 
