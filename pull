@@ -22,6 +22,10 @@ find /media/tions\:\ -Wal/ -iname '*mov' -exec mv -vb {} $INCOMING \;
 find /media/-strict-fie/ -iname '*jpg' -exec mv -vb {} $INCOMING \;
 find /media/-strict-fie/ -iname '*mov' -exec mv -vb {} $INCOMING \;
 
+# And again...
+find /media/carlo/F009-64A5 -iname '*jpg' -exec mv -vb {} $INCOMING \;
+find /media/carlo/F009-64A5 -iname '*mov' -exec mv -vb {} $INCOMING \;
+
 # Remove Canon S2 IS thumbnails
 find /media/CANON_DC -iname '*thm' -exec rm -vb {} \;
 
@@ -48,3 +52,4 @@ sudo umount /media/F009-64A5/
 sudo umount /media/CANON_DC
 sudo umount /dev/mmcblk0p1
 sudo umount $HOME/sshdroid
+sudo umount /media/carlo/F009-64A5

@@ -54,7 +54,8 @@ safeRename old new = when (old /= new) (do exists <- doesFileExist new
 
 subsecond :: ParsecT String u Data.Functor.Identity.Identity String
 subsecond = do
-    many (noneOf ".")
+    char '_'
+    many1 (noneOf ".")
 
 {-
 samsungPhotoFile parses a filename from my Samsung Galaxy S3, as seen on the
