@@ -3,7 +3,6 @@
 import Control.Applicative hiding ((<|>),many)
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Proxy
 import Data.Either
 import Data.Functor.Identity
 import Data.List (intercalate)
