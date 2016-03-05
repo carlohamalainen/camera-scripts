@@ -114,7 +114,40 @@ manyThenChar c = do
 createdTime :: ParsecT String u Data.Functor.Identity.Identity PhotoDateTime
 createdTime = do
     string "Image Created: "
-   
+
+    year  <- manyThenChar ':'
+    month <- manyThenChar ':'
+    day   <- manyThenChar ' '
+
+    hour   <- manyThenChar ':'
+    minute <- manyThenChar ':'
+    second <- manyThenChar '\n'
+
+    return $ PhotoDateTime year month day hour minute second Nothing
+
+-- "    date:create: 2016-03-05T15:59:33+08:00"
+createdTimeIdentifyRaw :: ParsecT String u Data.Functor.Identity.Identity PhotoDateTime
+createdTimeIdentifyRaw = do
+    string "    date:create: "
+
+    year  <- manyThenChar '-'
+    month <- manyThenChar '-'
+    day   <- manyThenChar 'T'
+
+    hour   <- manyThenChar ':'
+    minute <- manyThenChar ':'
+    second <- manyThenChar '+'
+
+    _ <- manyThenChar ':'
+    _ <- manyThenChar '\n'
+
+    return $ PhotoDateTime year month day hour minute second Nothing
+
+-- "    exif:DateTime: 2016:03:04 18:05:25"
+createdTimeIdentifyExif :: ParsecT String u Data.Functor.Identity.Identity PhotoDateTime
+createdTimeIdentifyExif = do
+    string "    exif:DateTime: "
+
     year  <- manyThenChar ':'
     month <- manyThenChar ':'
     day   <- manyThenChar ' '
@@ -139,6 +172,22 @@ parseCreatedTimeFromExif f = do
     case length parseResults of 1 -> return $ Just $ head parseResults
                                 _ -> return Nothing
 
+parseCreatedTimeFromIdentify :: String -> IO (Maybe PhotoDateTime)
+parseCreatedTimeFromIdentify f = do
+    (_, Just hout, _, _) <- liftIO $ createProcess (proc "identify" ["-verbose", f]){ std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
+
+    stdOut <- liftIO $ readRestOfHandle hout
+    -- stderr <- liftIO $ readRestOfHandle herr  -- FIXME we're ignoring stderr...
+
+    let linesWithTerminatingNewlines = map (++ "\n") (lines stdOut)
+        parseBlah  = map (parse createdTimeIdentifyRaw  "") linesWithTerminatingNewlines
+        parseBlah' = map (parse createdTimeIdentifyExif "") linesWithTerminatingNewlines
+        parseResults = rights $ parseBlah' ++ parseBlah :: [PhotoDateTime]
+
+    case parseResults of
+        (x:_)   -> return $ Just x
+        []      -> return Nothing
+
 -- Work out new file name by parsing a samsung-like name (handles the subsecond issue)
 newFilenameFromSamsung :: FilePath -> Maybe FilePath
 newFilenameFromSamsung f = case new of (Right new') -> Just (joinPath [fst $ splitFileName f, new'])
@@ -152,11 +201,18 @@ newFilenameFromExif f = do new <- parseCreatedTimeFromExif f
                            case new of (Just new') -> return $ Just (joinPath [fst $ splitFileName f, finalFilename new'])
                                        _           -> return Nothing
 
+-- Use imagemagick's 'identify -verbose' to find a date.
+newFilenameFromIdentify :: FilePath -> IO (Maybe FilePath)
+newFilenameFromIdentify f = do new <- parseCreatedTimeFromIdentify f
+
+                               case new of (Just new') -> return $ Just (joinPath [fst $ splitFileName f, finalFilename new'])
+                                           _           -> return Nothing
+
 main :: IO ()
 main = do
     files <- filter (`notElem` [".", ".."]) <$> getDirectoryContents "."
 
-    forM_ files (\f -> do possibleNewNames <- catMaybes <$> sequence [return $newFilenameFromSamsung f, newFilenameFromExif f]
+    forM_ files (\f -> do possibleNewNames <- catMaybes <$> sequence [return $ newFilenameFromSamsung f, newFilenameFromExif f, newFilenameFromIdentify f]
 
                           if null possibleNewNames then putStrLn $ "skipping " ++ f
                                                    else safeRename f (head possibleNewNames))
