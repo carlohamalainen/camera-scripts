@@ -3,9 +3,10 @@
 import Control.Applicative hiding ((<|>),many)
 import Control.Monad
 import Control.Monad.IO.Class
+import Data.Char (toLower)
 import Data.Either
 import Data.Functor.Identity
-import Data.List (intercalate)
+import Data.List (intercalate, isSuffixOf)
 import Data.Maybe
 import System.Directory
 import System.FilePath.Posix
@@ -13,6 +14,7 @@ import System.IO
 import System.Process
 import Text.Parsec
 import Text.Parsec.String
+import Text.Printf (printf)
 
 import qualified Data.ByteString as BS
 import qualified Data.Map as DM
@@ -47,9 +49,25 @@ finalFilename (PhotoDateTime year month day hour minute second Nothing)
     = intercalate "-" [year, month, day] ++ "++" ++ intercalate "-" [hour, minute, second] ++ ".jpg"
 
 safeRename :: FilePath -> FilePath -> IO ()
-safeRename old new = when (old /= new) (do exists <- doesFileExist new
-                                           (when (not exists) (do renameFile old new
-                                                                  putStrLn $ old ++ " -> " ++ new)))
+safeRename old new = do exists <- doesFileExist new
+                        if exists then safeRename' 0 old new
+                                  else do renameFile old new
+                                          putStrLn $ old ++ " -> " ++ new
+  where
+    newName n f = let (f', ext) = splitExtension f in
+                    printf "%s_%06d%s" f' n ext
+
+    -- Target exists, so make a new name.
+    safeRename' :: Int -> FilePath -> FilePath -> IO ()
+    safeRename' n old new = do
+        let new' = newName n new
+
+        exists <- doesFileExist new'
+
+        if exists
+            then safeRename' (n + 1) old new
+            else do renameFile old new
+                    putStrLn $ old ++ " -> " ++ new
 
 subsecond :: ParsecT String u Data.Functor.Identity.Identity String
 subsecond = do
@@ -172,21 +190,30 @@ parseCreatedTimeFromExif f = do
     case length parseResults of 1 -> return $ Just $ head parseResults
                                 _ -> return Nothing
 
+isImageFile :: String -> Bool
+isImageFile f = isJpg || isPNG
+  where
+    isJpg   = "jpg"  `isSuffixOf` f'
+    isPNG   = "png"  `isSuffixOf` f'
+
+    f' = map toLower f
+
 parseCreatedTimeFromIdentify :: String -> IO (Maybe PhotoDateTime)
-parseCreatedTimeFromIdentify f = do
-    (_, Just hout, _, _) <- liftIO $ createProcess (proc "identify" ["-verbose", f]){ std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
+parseCreatedTimeFromIdentify f =
+    if isImageFile f then do (_, Just hout, _, _) <- liftIO $ createProcess (proc "identify" ["-verbose", f]){ std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
 
-    stdOut <- liftIO $ readRestOfHandle hout
-    -- stderr <- liftIO $ readRestOfHandle herr  -- FIXME we're ignoring stderr...
+                             stdOut <- liftIO $ readRestOfHandle hout
+                             -- stderr <- liftIO $ readRestOfHandle herr  -- FIXME we're ignoring stderr...
 
-    let linesWithTerminatingNewlines = map (++ "\n") (lines stdOut)
-        parseBlah  = map (parse createdTimeIdentifyRaw  "") linesWithTerminatingNewlines
-        parseBlah' = map (parse createdTimeIdentifyExif "") linesWithTerminatingNewlines
-        parseResults = rights $ parseBlah' ++ parseBlah :: [PhotoDateTime]
+                             let linesWithTerminatingNewlines = map (++ "\n") (lines stdOut)
+                                 parseBlah  = map (parse createdTimeIdentifyRaw  "") linesWithTerminatingNewlines
+                                 parseBlah' = map (parse createdTimeIdentifyExif "") linesWithTerminatingNewlines
+                                 parseResults = rights $ parseBlah' ++ parseBlah :: [PhotoDateTime]
 
-    case parseResults of
-        (x:_)   -> return $ Just x
-        []      -> return Nothing
+                             case parseResults of
+                                 (x:_)   -> return $ Just x
+                                 []      -> return Nothing
+                     else return Nothing
 
 -- Work out new file name by parsing a samsung-like name (handles the subsecond issue)
 newFilenameFromSamsung :: FilePath -> Maybe FilePath
@@ -212,7 +239,25 @@ main :: IO ()
 main = do
     files <- filter (`notElem` [".", ".."]) <$> getDirectoryContents "."
 
-    forM_ files (\f -> do possibleNewNames <- catMaybes <$> sequence [return $ newFilenameFromSamsung f, newFilenameFromExif f, newFilenameFromIdentify f]
-
+    forM_ files (\f -> do -- possibleNewNames <- catMaybes <$> sequence [return $ newFilenameFromSamsung f, newFilenameFromExif f, newFilenameFromIdentify f]
+                          possibleNewNames <- doblah f
+                          putStrLn $ "Processing: " ++ f ++ " :: " ++ show possibleNewNames
                           if null possibleNewNames then putStrLn $ "skipping " ++ f
                                                    else safeRename f (head possibleNewNames))
+
+
+
+  where
+    doblah :: FilePath -> IO [FilePath]
+    doblah f = do
+        let r1 = newFilenameFromSamsung f
+
+        case r1 of
+            Just r1'    -> return [r1']
+            Nothing     -> do r2 <- newFilenameFromExif f
+                              case r2 of
+                                Just r2'    -> return [r2']
+                                Nothing     -> do r3 <- newFilenameFromIdentify f
+                                                  case r3 of
+                                                    Just r3'    -> return [r3']
+                                                    Nothing     -> return []
