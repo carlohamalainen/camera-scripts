@@ -52,7 +52,7 @@ safeRename :: FilePath -> FilePath -> IO ()
 safeRename old new = do exists <- doesFileExist new
                         if exists then safeRename' 0 old new
                                   else do renameFile old new
-                                          putStrLn $ old ++ " -> " ++ new
+                                          putStrLn $ old ++ " 1-> " ++ new
   where
     newName n f = let (f', ext) = splitExtension f in
                     printf "%s_%06d%s" f' n ext
@@ -66,8 +66,8 @@ safeRename old new = do exists <- doesFileExist new
 
         if exists
             then safeRename' (n + 1) old new
-            else do renameFile old new
-                    putStrLn $ old ++ " -> " ++ new
+            else do renameFile old new'
+                    putStrLn $ old ++ " 2-> " ++ new'
 
 subsecond :: ParsecT String u Data.Functor.Identity.Identity String
 subsecond = do
