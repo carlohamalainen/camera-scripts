@@ -4,6 +4,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# OPTIONS_GHC -fno-cse #-}
+
 import Control.Monad ( MonadPlus(mzero), forM_, when )
 import Data.Char (toLower)
 import Data.List (intercalate, isSuffixOf)
@@ -42,6 +45,13 @@ import Control.Lens
 import Control.Lens.TH
 import Graphics.HsExif (subSecTimeOriginal)
 
+import System.Console.CmdArgs
+
+data Args = Args
+    { dryRun :: Bool
+    }
+  deriving (Show, Data, Typeable)
+
 newtype ExifDateTime = ExifDateTime LocalTime
   deriving Show
 
@@ -49,11 +59,12 @@ newtype ExifSubSecDateTime = ExifSubSecDateTime LocalTime
   deriving Show
 
 data ExifTool = ExifTool
-    { _exifSourceFile                :: FilePath     -- e.g. "/home/carlo/incoming/IMG_8971.HEIC"
-    , _exifDileName                  :: FilePath     -- e.g. "IMG_8971.HEIC"
-    , _exifDirectory                 :: FilePath     -- e.g. "/home/carlo/incoming"
-    , _exifDateTimeOriginal          :: ExifDateTime
-    , _exifSubSecDateTimeOriginal    :: Maybe ExifSubSecDateTime
+    { _exifSourceFile               :: FilePath     -- e.g. "/home/carlo/incoming/IMG_8971.HEIC"
+    , _exifDileName                 :: FilePath     -- e.g. "IMG_8971.HEIC"
+    , _exifDirectory                :: FilePath     -- e.g. "/home/carlo/incoming"
+    , _exifDateTimeOriginal         :: Maybe ExifDateTime
+    , _exifSubSecDateTimeOriginal   :: Maybe ExifSubSecDateTime
+    , _exifCreationDate             :: Maybe ExifDateTime
     }
   deriving Show
 
@@ -62,9 +73,11 @@ $(makePrisms ''ExifSubSecDateTime)
 $(makeLenses ''ExifTool)
 
 instance A.FromJSON ExifDateTime where
-    parseJSON (String s) = case parseTimeM True defaultTimeLocale "%Y:%m:%d %H:%M:%S" (T.unpack s) of
-                            Nothing -> fail $ "Couldn't parse PhotoDateTime <<<" ++ T.unpack s ++ ">>>"
-                            Just x  -> pure $ ExifDateTime x
+    parseJSON (String s) = let d0 = parseTimeM True defaultTimeLocale "%Y:%m:%d %H:%M:%S%z" (T.unpack s)
+                               d1 = parseTimeM True defaultTimeLocale "%Y:%m:%d %H:%M:%S"   (T.unpack s)
+                            in case d0 <|> d1 of
+                                Nothing -> fail $ "Couldn't parse PhotoDateTime <<<" ++ T.unpack s ++ ">>>"
+                                Just x  -> pure $ ExifDateTime x
     parseJSON _ = mzero
 
 instance A.FromJSON ExifSubSecDateTime where
@@ -78,8 +91,9 @@ instance A.FromJSON ExifTool where
         <$> v .: "SourceFile"
         <*> v .: "FileName"
         <*> v .: "Directory"
-        <*> v .: "DateTimeOriginal"
+        <*> v .:? "DateTimeOriginal"
         <*> v .:? "SubSecDateTimeOriginal"
+        <*> v .:? "CreationDate"
     parseJSON _ = mzero
 
 readRestOfHandle' :: Handle -> IO B.ByteString
@@ -111,16 +125,17 @@ safeRename old new = do exists <- doesFileExist new
                     putStrLn $ old ++ " 2-> " ++ new'
 
 isImageFile :: String -> Bool
-isImageFile f = isJpg || isPNG || isHEIC
+isImageFile f = is "jpg" || is "png" || is "heic" || is "mov"
   where
-    isJpg   = "jpg"  `isSuffixOf` f'
-    isPNG   = "png"  `isSuffixOf` f'
-    isHEIC  = "heic" `isSuffixOf` f'
-
     f' = map toLower f
+    is ext = ext `isSuffixOf` f'
 
 main :: IO ()
 main = do
+    args <- cmdArgs $ Args
+                { dryRun = False &= explicit &= name "dry-run" &= help "Dry run, don't rename files."
+                }
+
     files <- filter isImageFile <$> getDirectoryContents "."
 
     forM_ files $ \f -> do
@@ -134,9 +149,10 @@ main = do
             j = A.decode stdOut
 
         let exifWithSubsecond = j ^? _Just . _head . exifSubSecDateTimeOriginal . _Just . _ExifSubSecDateTime
-            exifWithout       = j ^? _Just . _head . exifDateTimeOriginal               . _ExifDateTime
+            exifWithout       = j ^? _Just . _head . exifDateTimeOriginal       . _Just . _ExifDateTime
+            created           = j ^? _Just . _head . exifCreationDate           . _Just . _ExifDateTime -- Apple MOV files have these
 
-        let d = exifWithSubsecond <|> exifWithout <|> dto
+        let d = exifWithSubsecond <|> exifWithout <|> dto <|> created
 
         -- FIXME both? beside?
         case (dto, exifWithout) of
@@ -145,12 +161,21 @@ main = do
             _ -> return ()
 
         case d of
-            Nothing -> error f
+            Nothing -> do
+                print stdOut
+                print j
+                error f
             Just d' -> do
                 let f' = formatTime defaultTimeLocale "%Y-%m-%d++%H-%M-%S%q%z" d' ++ "_" ++ f
-                safeRename f f'
+                    (f0, ext) = splitExtension f'
 
--- TODO HsExif doesn't know about PNG files.
+                    f'' = f0 ++ map toLower ext
+
+                if dryRun args
+                    then putStrLn $ "DRY RUN " ++ f ++ "\t\t=>\t\t" ++ f''
+                    else safeRename f f''
+
+-- TODO HsExif doesn't know about PNG and MOV files.
 
 
 
