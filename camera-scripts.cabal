@@ -15,4 +15,14 @@ cabal-version:       >=1.8
 executable rename-photos
   main-is:             renamePhotos.hs
   -- other-modules:
-  build-depends:       base, bytestring, containers, directory, filepath, parsec, pipes, process, text, transformers
+  build-depends:       base
+                     , bytestring
+                     , containers
+                     , directory
+                     , filepath
+                     , process
+                     , text
+                     , hsexif
+                     , aeson
+                     , lens
+                     , time
