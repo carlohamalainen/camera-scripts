@@ -2,7 +2,7 @@
 
 set -e
 
-for f in `ls 20*jpg 20*JPG 20*jpeg 20*JPEG 20*png 20*PNG 20*heic 20*HEIC`
+for f in `ls 20*gif 20*GIF 20*jpg 20*JPG 20*jpeg 20*JPEG 20*png 20*PNG 20*heic 20*HEIC`
 do
     yyyy=`echo ${f} | cut -f 1 -d '-'`
     mm=`echo ${f} | cut -f 2 -d '-'`

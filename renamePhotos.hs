@@ -127,7 +127,7 @@ safeRename old new = do exists <- doesFileExist new
                     putStrLn $ old ++ " 2-> " ++ new'
 
 isImageFile :: String -> Bool
-isImageFile f = prefix f && (is "jpg" || is "jpeg" || is "png" || is "heic" || is "mov" || is "mp4")
+isImageFile f = prefix f && (is "gif" || is "jpg" || is "jpeg" || is "png" || is "heic" || is "mov" || is "mp4")
   where
     prefix f = "IMG" `isPrefixOf` f || head f `elem` ['A'..'Z'] -- someone makes weird files like TRJQ8200.JPG
     is ext = ext `isSuffixOf` (map toLower f)
