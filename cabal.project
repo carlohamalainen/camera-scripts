@@ -1,0 +1,7 @@
+packages:
+    .
+
+source-repository-package
+    type: git
+    location: https://github.com/carlohamalainen/hsexif
+    tag: bd1a845c5ded3b7b6fb56b068d5142d2bc7e9668
