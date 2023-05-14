@@ -9,7 +9,7 @@
 
 import Control.Monad ( MonadPlus(mzero), forM_, when )
 import Data.Char (toLower)
-import Data.List (intercalate, isSuffixOf)
+import Data.List (intercalate, isPrefixOf, isSuffixOf)
 import System.Directory
     ( doesFileExist, getDirectoryContents, renameFile )
 import System.FilePath.Posix ( splitExtension )
@@ -65,6 +65,7 @@ data ExifTool = ExifTool
     , _exifDateTimeOriginal         :: Maybe ExifDateTime
     , _exifSubSecDateTimeOriginal   :: Maybe ExifSubSecDateTime
     , _exifCreationDate             :: Maybe ExifDateTime
+    , _exifFileModifyDate           :: Maybe ExifDateTime
     }
   deriving Show
 
@@ -94,6 +95,7 @@ instance A.FromJSON ExifTool where
         <*> v .:? "DateTimeOriginal"
         <*> v .:? "SubSecDateTimeOriginal"
         <*> v .:? "CreationDate"
+        <*> v .:? "FileModifyDate"
     parseJSON _ = mzero
 
 readRestOfHandle' :: Handle -> IO B.ByteString
@@ -125,10 +127,10 @@ safeRename old new = do exists <- doesFileExist new
                     putStrLn $ old ++ " 2-> " ++ new'
 
 isImageFile :: String -> Bool
-isImageFile f = is "jpg" || is "png" || is "heic" || is "mov"
+isImageFile f = prefix f && (is "jpg" || is "jpeg" || is "png" || is "heic" || is "mov" || is "mp4")
   where
-    f' = map toLower f
-    is ext = ext `isSuffixOf` f'
+    prefix f = "IMG" `isPrefixOf` f || head f `elem` ['A'..'Z'] -- someone makes weird files like TRJQ8200.JPG
+    is ext = ext `isSuffixOf` (map toLower f)
 
 main :: IO ()
 main = do
@@ -151,12 +153,17 @@ main = do
         let exifWithSubsecond = j ^? _Just . _head . exifSubSecDateTimeOriginal . _Just . _ExifSubSecDateTime
             exifWithout       = j ^? _Just . _head . exifDateTimeOriginal       . _Just . _ExifDateTime
             created           = j ^? _Just . _head . exifCreationDate           . _Just . _ExifDateTime -- Apple MOV files have these
+            modified          = j ^? _Just . _head . exifFileModifyDate         . _Just . _ExifDateTime -- Fallback for things like Strava-share images.
 
-        let d = exifWithSubsecond <|> exifWithout <|> dto <|> created
+        let d = exifWithSubsecond
+             <|> exifWithout
+             <|> dto
+             <|> created
+             <|> modified
 
-        -- FIXME both? beside?
-        case (dto, exifWithout) of
-            (Just dto', Just exifWithout') -> when (dto' /= exifWithout') $
+        -- Making sure that Graphics.HsExif parses the same date as the external Perl program exiftools.
+        case sequenceA [dto, exifWithout] of
+            Just [dto', exifWithout'] -> when (dto' /= exifWithout') $
                 error $ "Base date mismatch: " ++ show dto' ++ " " ++ show exifWithout'
             _ -> return ()
 
