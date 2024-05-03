@@ -24,6 +24,7 @@ executable rename-photos
                      , text
                      , hsexif
                      , aeson
+                     , lens-aeson
                      , lens
                      , time
                      , cmdargs

@@ -3,8 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
-
 {-# LANGUAGE DeriveDataTypeable #-}
+
 {-# OPTIONS_GHC -fno-cse #-}
 
 import Control.Monad ( MonadPlus(mzero), forM_, when )
@@ -13,7 +13,7 @@ import Data.List (intercalate, isPrefixOf, isSuffixOf)
 import System.Directory
     ( doesFileExist, getDirectoryContents, renameFile )
 import System.FilePath.Posix ( splitExtension )
-import System.IO ( hIsEOF, Handle )
+import System.IO ( hIsEOF, Handle, stdout )
 import System.Process
     ( createProcess,
       proc,
@@ -34,6 +34,7 @@ import qualified Graphics.HsExif as E
 
 import qualified Data.Aeson as A
 import           Data.Aeson (Value(..), (.:), (.:?))
+import           Data.Aeson.Lens (key, _Array, _String)
 
 import qualified Data.Text as T
 import qualified Control.Applicative as App
@@ -42,15 +43,18 @@ import qualified Data.ByteString.Lazy as B
 import Control.Applicative
 
 import Control.Lens
+
 import Control.Lens.TH
 import Graphics.HsExif (subSecTimeOriginal)
 
-import System.Console.CmdArgs
+import qualified System.Console.CmdArgs as CmdArgs
 
-data Args = Args
-    { dryRun :: Bool
-    }
-  deriving (Show, Data, Typeable)
+import qualified Data.Time as Time
+import qualified Data.Time.Format as Time
+import Data.Aeson.Types (parse)
+
+newtype Args = Args { dryRun :: Bool }
+  deriving (Show, CmdArgs.Data, CmdArgs.Typeable)
 
 newtype ExifDateTime = ExifDateTime LocalTime
   deriving Show
@@ -127,22 +131,42 @@ safeRename old new = do exists <- doesFileExist new
                     putStrLn $ old ++ " 2-> " ++ new'
 
 isImageFile :: String -> Bool
-isImageFile f = prefix f && (is "gif" || is "jpg" || is "jpeg" || is "png" || is "heic" || is "mov" || is "mp4")
+isImageFile f = prefix f && (is "gif" || is "jpg" || is "jpeg" || is "png" || is "heic" || is "mov" || is "mp4" || is "webp")
   where
     prefix f = "IMG" `isPrefixOf` f || head f `elem` ['A'..'Z'] -- someone makes weird files like TRJQ8200.JPG
-    is ext = ext `isSuffixOf` (map toLower f)
+    is ext = ext `isSuffixOf` map toLower f
+
+imageMagickCreatedTime :: FilePath -> IO (Maybe LocalTime)
+imageMagickCreatedTime f = do
+    let f' = f <> "[1x1+0+0]" -- https://www.imagemagick.org/discourse-server/viewtopic.php?t=30987
+
+    (_, Just hout, _, _) <- createProcess (proc "convert" [f', "json:"]){ std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
+    stdOut <- readRestOfHandle' hout
+
+    let json :: Either String Value
+        json = A.eitherDecode stdOut
+
+    -- [0].image.properties["date:create"]
+    return $ json ^? _Right
+            . _Array . ix 0 . key "image" . key "properties" . key "date:create" . _String
+            . to T.unpack
+            . to (parseTimeM True defaultTimeLocale "%Y-%m-%dT%H:%M:%S%Z")
+            . _Just
 
 main :: IO ()
 main = do
-    args <- cmdArgs $ Args
-                { dryRun = False &= explicit &= name "dry-run" &= help "Dry run, don't rename files."
+    args <- CmdArgs.cmdArgs $ Args
+                { dryRun = False CmdArgs.&= CmdArgs.explicit CmdArgs.&= CmdArgs.name "dry-run" CmdArgs.&= CmdArgs.help "Dry run, don't rename files."
                 }
 
     files <- filter isImageFile <$> getDirectoryContents "."
 
+    print files
     forM_ files $ \f -> do
         x <- E.parseFileExif f
         let dto = x ^? _Right . to E.getDateTimeOriginal . _Just
+
+        dateCreated <- imageMagickCreatedTime f
 
         (_, Just hout, _, _) <- createProcess (proc "exiftool" ["-j", f]){ std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
         stdOut <- readRestOfHandle' hout
@@ -160,6 +184,7 @@ main = do
              <|> dto
              <|> created
              <|> modified
+             <|> dateCreated
 
         -- Making sure that Graphics.HsExif parses the same date as the external Perl program exiftools.
         case sequenceA [dto, exifWithout] of
@@ -183,6 +208,3 @@ main = do
                     else safeRename f f''
 
 -- TODO HsExif doesn't know about PNG and MOV files.
-
-
-
